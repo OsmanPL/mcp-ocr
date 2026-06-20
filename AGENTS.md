@@ -149,6 +149,27 @@ Input:
 
 This tool MUST return the same OCR result shape as `image_box_ocr`.
 
+The project also exposes a ChatGPT file-upload tool:
+
+```txt
+image_box_ocr_file
+```
+
+This tool MUST declare OpenAI file params metadata for `image_file` and accept ChatGPT file references shaped like:
+
+```json
+{
+  "image_file": {
+    "download_url": "https://...",
+    "file_id": "file_...",
+    "mime_type": "image/png",
+    "file_name": "box.png"
+  }
+}
+```
+
+Use this tool for images uploaded directly in ChatGPT. Do not ask ChatGPT to convert large uploaded images into base64.
+
 The primary required local path tool remains:
 
 ```txt

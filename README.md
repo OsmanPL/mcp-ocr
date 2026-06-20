@@ -59,7 +59,7 @@ Input:
 
 ### `image_box_ocr_base64`
 
-Use this tool for hosted or remote MCP clients, including FastMCP Cloud / Prefect Horizon, ChatGPT, Copilot, Claude, or any client that cannot place files directly inside the server runtime.
+Use this tool as a fallback for hosted or remote MCP clients that can provide complete base64 payloads.
 
 Input:
 
@@ -94,6 +94,23 @@ Error output:
 }
 ```
 
+### `image_box_ocr_file`
+
+Use this tool for ChatGPT file uploads. ChatGPT passes the uploaded image as an authorized file reference, not as a truncated base64 string.
+
+Input:
+
+```json
+{
+  "image_file": {
+    "download_url": "https://...",
+    "file_id": "file_...",
+    "mime_type": "image/png",
+    "file_name": "box.png"
+  }
+}
+```
+
 ## FastMCP Cloud / Prefect Horizon
 
 Deploy this project as a remote MCP server, not as a normal REST API.
@@ -104,7 +121,13 @@ Use this Horizon entrypoint:
 src/box_ocr_mcp/interfaces/mcp/horizon_server.py:mcp
 ```
 
-Hosted clients should prefer:
+ChatGPT clients should prefer:
+
+```txt
+image_box_ocr_file
+```
+
+Other remote clients can use:
 
 ```txt
 image_box_ocr_base64

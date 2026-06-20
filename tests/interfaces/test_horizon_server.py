@@ -20,4 +20,5 @@ def test_horizon_entrypoint_exposes_expected_tools() -> None:
     assert asyncio.run(list_tool_names()) == [
         "image_box_ocr",
         "image_box_ocr_base64",
+        "image_box_ocr_file",
     ]
