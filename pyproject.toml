@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=3.4.2",
     "httpx>=0.28.1",
-    "opencv-python>=4.12.0.88",
+    "opencv-contrib-python-headless>=4.10.0.84",
     "paddleocr>=3.7.0",
     "paddlepaddle>=3.3.1",
     "pillow>=12.2.0",
@@ -30,3 +30,6 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+
+[tool.uv]
+exclude-dependencies = ["opencv-contrib-python"]
