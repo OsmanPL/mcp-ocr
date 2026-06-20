@@ -58,9 +58,31 @@ def test_ocr_image_returns_exact_success_shape(
     }
 
 
+def test_ocr_image_accepts_single_image_file_parameter(monkeypatch) -> None:
+    fake_engine = FakeOcrEngine()
+    monkeypatch.setattr(server_module, "_ocr_engine", fake_engine)
+
+    result = call_ocr_image(
+        {"image_file": {"base64": png_base64(), "mime_type": "image/png"}}
+    )
+
+    assert fake_engine.calls
+    assert result["raw"] == "LOTE\nABC123\nVENC: 20/10/2026"
+
+
 def test_only_ocr_image_tool_is_registered() -> None:
     async def list_tool_names() -> list[str]:
         tools = await mcp.list_tools()
         return [tool.name for tool in tools]
 
     assert asyncio.run(list_tool_names()) == ["ocr_image"]
+
+
+def test_ocr_image_declares_openai_file_param() -> None:
+    async def get_tool_meta() -> dict[str, object]:
+        tools = await mcp.list_tools()
+        tool = next(tool for tool in tools if tool.name == "ocr_image")
+        assert tool.meta is not None
+        return dict(tool.meta)
+
+    assert asyncio.run(get_tool_meta())["openai/fileParams"] == ["image_file"]

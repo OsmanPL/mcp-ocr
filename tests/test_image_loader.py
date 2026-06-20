@@ -19,12 +19,16 @@ def png_bytes() -> bytes:
 
 def test_rejects_missing_image_input() -> None:
     with pytest.raises(ImageInputError, match="exactly one"):
-        load_image(image_url=None, image_base64=None)
+        load_image(image_url=None, image_base64=None, image_file=None)
 
 
 def test_rejects_both_image_inputs() -> None:
     with pytest.raises(ImageInputError, match="exactly one"):
-        load_image(image_url="https://example.com/a.png", image_base64="abc")
+        load_image(
+            image_url="https://example.com/a.png",
+            image_base64="abc",
+            image_file=None,
+        )
 
 
 def test_loads_base64_image_in_memory() -> None:
@@ -93,6 +97,53 @@ def test_downloads_image_url_and_validates_content_type() -> None:
         )
 
     assert loaded.suffix == ".png"
+
+
+def test_loads_image_file_download_url() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            200,
+            headers={"content-type": "image/png"},
+            content=png_bytes(),
+        )
+    )
+
+    with httpx.Client(transport=transport) as client:
+        loaded = load_image(
+            image_url=None,
+            image_base64=None,
+            image_file={
+                "download_url": "https://example.com/uploaded.png",
+                "file_id": "file_test",
+                "mime_type": "image/png",
+                "file_name": "uploaded.png",
+            },
+            http_client=client,
+        )
+
+    assert loaded.suffix == ".png"
+
+
+def test_loads_image_file_base64_payload() -> None:
+    encoded = base64.b64encode(png_bytes()).decode()
+
+    loaded = load_image(
+        image_url=None,
+        image_base64=None,
+        image_file={"base64": encoded, "mime_type": "image/png"},
+    )
+
+    assert loaded.data.startswith(b"\x89PNG")
+    assert loaded.suffix == ".png"
+
+
+def test_rejects_image_file_without_supported_payload() -> None:
+    with pytest.raises(ImageInputError, match="image_file must include"):
+        load_image(
+            image_url=None,
+            image_base64=None,
+            image_file={"file_id": "file_test"},
+        )
 
 
 def test_rejects_unsupported_url_content_type() -> None:

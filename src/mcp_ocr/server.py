@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastmcp import FastMCP
 
 from mcp_ocr.extraction import extract_visible_key_values
@@ -16,16 +18,22 @@ _ocr_engine = PaddleOcrEngine()
 @mcp.tool(
     name="ocr_image",
     description=(
-        "Receive an image URL or Base64 image, perform OCR, and return literal "
-        "extracted text as JSON."
+        "Receive an image file, image URL, or Base64 image, perform OCR, and "
+        "return literal extracted text as JSON."
     ),
+    meta={"openai/fileParams": ["image_file"]},
 )
 def ocr_image(
+    image_file: dict[str, Any] | str | None = None,
     image_url: str | None = None,
     image_base64: str | None = None,
 ) -> dict[str, object]:
-    """Run OCR on an image URL or base64 image."""
-    image = load_image(image_url=image_url, image_base64=image_base64)
+    """Run OCR on an image file, image URL, or base64 image."""
+    image = load_image(
+        image_file=image_file,
+        image_url=image_url,
+        image_base64=image_base64,
+    )
     ocr_text = _ocr_engine.extract_text(image.data, image.suffix)
     result = OcrImageResult(
         raw=ocr_text.raw,

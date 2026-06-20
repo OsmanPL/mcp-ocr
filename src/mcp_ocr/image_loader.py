@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -41,19 +43,64 @@ def load_image(
     *,
     image_url: str | None,
     image_base64: str | None,
+    image_file: Mapping[str, Any] | str | None = None,
     http_client: httpx.Client | None = None,
 ) -> LoadedImage:
-    """Load one image from URL or base64, validating size and format."""
-    if bool(image_url) == bool(image_base64):
-        raise ImageInputError("Provide exactly one of image_url or image_base64.")
+    """Load one image from URL, base64, or a client-provided file object."""
+    provided_count = sum(value is not None for value in (image_url, image_base64, image_file))
+    if provided_count != 1:
+        raise ImageInputError("Provide exactly one of image_url, image_base64, or image_file.")
 
     if image_url:
         data, content_type = _download_image(image_url, http_client=http_client)
         return _validate_image_bytes(data, content_type=content_type)
 
+    if image_file is not None:
+        return _load_image_file(image_file, http_client=http_client)
+
     assert image_base64 is not None
     data = _decode_base64_image(image_base64)
     return _validate_image_bytes(data, content_type=None)
+
+
+def _load_image_file(
+    image_file: Mapping[str, Any] | str,
+    *,
+    http_client: httpx.Client | None,
+) -> LoadedImage:
+    """Load common MCP/client file payload shapes through the same validation path."""
+    if isinstance(image_file, str):
+        if image_file.startswith(("http://", "https://")):
+            data, content_type = _download_image(image_file, http_client=http_client)
+            return _validate_image_bytes(data, content_type=content_type)
+        data = _decode_base64_image(image_file)
+        return _validate_image_bytes(data, content_type=None)
+
+    url = _first_string_value(
+        image_file,
+        "download_url",
+        "url",
+        "uri",
+        "href",
+    )
+    if url is not None:
+        data, content_type = _download_image(url, http_client=http_client)
+        return _validate_image_bytes(data, content_type=content_type)
+
+    payload = _first_string_value(
+        image_file,
+        "image_base64",
+        "base64",
+        "data",
+        "content",
+    )
+    if payload is not None:
+        data = _decode_base64_image(payload)
+        return _validate_image_bytes(data, content_type=None)
+
+    raise ImageInputError(
+        "image_file must include a download_url, url, uri, or base64 image payload."
+    )
 
 
 def _download_image(
@@ -157,6 +204,14 @@ def _validate_image_bytes(data: bytes, *, content_type: str | None) -> LoadedIma
 
 def _base_content_type(value: str) -> str:
     return value.split(";", 1)[0].strip().lower()
+
+
+def _first_string_value(value: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
 
 
 def _suffix_for_format(image_format: str) -> str:
