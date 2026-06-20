@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, Field
 
 from box_ocr_mcp.application import ExtractTextFromBoxImageUseCase
 from box_ocr_mcp.infrastructure.image import (
@@ -12,6 +13,17 @@ from box_ocr_mcp.infrastructure.image import (
     FileReferenceImageError,
     FileReferenceImageWriter,
 )
+
+
+class ChatGptImageFile(BaseModel):
+    """ChatGPT authorized file reference for uploaded images."""
+
+    download_url: str = Field(
+        description="Temporary authorized URL for reading the uploaded image."
+    )
+    file_id: str = Field(description="ChatGPT file identifier.")
+    mime_type: str | None = Field(default=None, description="Uploaded image MIME type.")
+    file_name: str | None = Field(default=None, description="Uploaded image filename.")
 
 
 def _error_response(message: str) -> dict[str, Any]:
@@ -96,13 +108,20 @@ def register_tools(
 
     @server.tool(
         name="image_box_ocr_file",
-        description="Run OCR on an image uploaded in ChatGPT.",
+        description=(
+            "Preferred tool for OCR on images uploaded in ChatGPT. "
+            "Use this when the user attaches an image. The image_file argument "
+            "must be the uploaded file reference object, not a /mnt/data path "
+            "and not base64."
+        ),
         meta={"openai/fileParams": ["image_file"]},
     )
-    def image_box_ocr_file(image_file: dict[str, Any]) -> dict[str, Any]:
+    def image_box_ocr_file(image_file: ChatGptImageFile) -> dict[str, Any]:
         """Run OCR on a ChatGPT file reference and return raw detected text only."""
         try:
-            image_path = file_reference_image_writer.write_to_temp_file(image_file)
+            image_path = file_reference_image_writer.write_to_temp_file(
+                image_file.model_dump(exclude_none=True)
+            )
             result = use_case.execute(image_path)
         except FileReferenceImageError as exc:
             return _error_response(str(exc))
