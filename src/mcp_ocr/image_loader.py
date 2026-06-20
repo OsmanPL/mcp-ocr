@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from urllib.parse import urlparse
@@ -21,6 +22,7 @@ SUPPORTED_CONTENT_TYPES = {
     "image/bmp",
 }
 SUPPORTED_PIL_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF", "BMP"}
+DATA_URI_PATTERN = re.compile(r"^data:[^,]*;base64,", re.IGNORECASE)
 
 
 class ImageInputError(ValueError):
@@ -95,12 +97,15 @@ def _download_image(
 
 
 def _decode_base64_image(image_base64: str) -> bytes:
-    payload = image_base64.strip()
-    if "," in payload and payload.lower().startswith("data:"):
+    payload = _clean_base64_payload(image_base64)
+    if payload.startswith(("http://", "https://")):
+        raise ImageInputError("Use image_url for URL inputs, not image_base64.")
+
+    if DATA_URI_PATTERN.match(payload):
         payload = payload.split(",", 1)[1]
 
     try:
-        data = base64.b64decode(payload, validate=True)
+        data = _decode_base64_payload(payload)
     except (binascii.Error, ValueError) as exc:
         raise ImageInputError("Invalid base64 image payload.") from exc
 
@@ -108,6 +113,26 @@ def _decode_base64_image(image_base64: str) -> bytes:
         raise ImageInputError("Image exceeds maximum size.")
 
     return data
+
+
+def _clean_base64_payload(image_base64: str) -> str:
+    return "".join(image_base64.strip().split())
+
+
+def _decode_base64_payload(payload: str) -> bytes:
+    padded_payload = _with_base64_padding(payload)
+    try:
+        return base64.b64decode(padded_payload, validate=True)
+    except binascii.Error:
+        urlsafe_payload = padded_payload.replace("-", "+").replace("_", "/")
+        return base64.b64decode(urlsafe_payload, validate=True)
+
+
+def _with_base64_padding(payload: str) -> str:
+    missing_padding = len(payload) % 4
+    if missing_padding:
+        payload = f"{payload}{'=' * (4 - missing_padding)}"
+    return payload
 
 
 def _validate_image_bytes(data: bytes, *, content_type: str | None) -> LoadedImage:
