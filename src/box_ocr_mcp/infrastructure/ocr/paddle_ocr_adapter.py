@@ -3,8 +3,6 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from paddleocr import PaddleOCR  # type: ignore[import-untyped]
-
 from box_ocr_mcp.domain.entities import OcrResult
 
 
@@ -21,6 +19,8 @@ class PaddleOcrAdapter:
 
     def _get_ocr_engine(self) -> Any:
         if self._ocr_engine is None:
+            from paddleocr import PaddleOCR  # type: ignore[import-untyped]
+
             self._ocr_engine = PaddleOCR(
                 lang="latin",
                 use_angle_cls=True,
