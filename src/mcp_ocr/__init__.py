@@ -1,4 +1,4 @@
-"""MCP OCR package."""
+"""MCP OCR server package."""
 
 __all__ = ["__version__"]
 

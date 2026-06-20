@@ -1,43 +1,74 @@
-"""PaddleOCR adapter."""
+"""PaddleOCR adapter and result conversion."""
 
+from __future__ import annotations
+
+import os
+import tempfile
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from box_ocr_mcp.domain.entities import OcrResult
+
+@dataclass(frozen=True)
+class OcrText:
+    """Raw OCR text and confidence values."""
+
+    raw: str
+    confidence: float | None
 
 
-class PaddleOcrAdapter:
-    """Run OCR with PaddleOCR and convert results to domain entities."""
+class PaddleOcrEngine:
+    """Run OCR with PaddleOCR and return literal recognized text."""
 
-    def __init__(self, ocr_engine: Any | None = None) -> None:
+    def __init__(self, ocr_engine: Any | None = None, lang: str | None = None) -> None:
         self._ocr_engine = ocr_engine
+        self._lang = lang or os.getenv("MCP_OCR_LANG", "latin")
 
-    def extract_text(self, image_path: str) -> OcrResult:
-        """Extract raw OCR text from an image path."""
-        result = self._get_ocr_engine().predict(image_path)
-        return self._to_ocr_result(result)
+    def extract_text(self, image_bytes: bytes, suffix: str) -> OcrText:
+        """Extract text from image bytes using a temporary file for PaddleOCR."""
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+                temp_file.write(image_bytes)
+                temp_path = Path(temp_file.name)
+
+            result = self._predict(str(temp_path))
+            return self._to_ocr_text(result)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+    def _predict(self, image_path: str) -> Any:
+        engine = self._get_ocr_engine()
+        if hasattr(engine, "predict"):
+            return engine.predict(image_path)
+        if hasattr(engine, "ocr"):
+            return engine.ocr(image_path)
+        raise RuntimeError("OCR engine does not expose a supported prediction method.")
 
     def _get_ocr_engine(self) -> Any:
         if self._ocr_engine is None:
             from paddleocr import PaddleOCR  # type: ignore[import-untyped]
 
             self._ocr_engine = PaddleOCR(
-                lang="latin",
-                use_angle_cls=True,
+                lang=self._lang,
+                use_textline_orientation=True,
             )
         return self._ocr_engine
 
-    def _to_ocr_result(self, result: Any) -> OcrResult:
-        entries = list(self._extract_entries(result))
+    def _to_ocr_text(self, result: Any) -> OcrText:
+        entries = self._extract_entries(result)
         lines = [text for text, _score in entries]
         scores = [score for _text, score in entries if score is not None]
-        average_confidence = sum(scores) / len(scores) if scores else 0
 
-        return OcrResult(
-            raw_text="\n".join(lines),
-            lines=lines,
-            average_confidence=average_confidence,
-        )
+        confidence = None
+        if scores:
+            average = sum(scores) / len(scores)
+            confidence = average * 100 if average <= 1 else average
+            confidence = max(0.0, min(100.0, confidence))
+
+        return OcrText(raw="\n".join(lines), confidence=confidence)
 
     def _extract_entries(self, value: Any) -> list[tuple[str, float | None]]:
         if isinstance(value, Mapping):
@@ -55,7 +86,7 @@ class PaddleOcrAdapter:
             if direct_entry is not None:
                 return [direct_entry]
 
-            entries = []
+            entries: list[tuple[str, float | None]] = []
             for item in value:
                 entries.extend(self._extract_entries(item))
             return entries
@@ -75,7 +106,7 @@ class PaddleOcrAdapter:
             return []
 
         score_values = scores if self._is_sequence(scores) else []
-        entries = []
+        entries: list[tuple[str, float | None]] = []
         for index, text in enumerate(texts):
             if isinstance(text, str):
                 score = score_values[index] if index < len(score_values) else None
@@ -92,13 +123,13 @@ class PaddleOcrAdapter:
         second_item = value[1]
 
         if isinstance(first_item, str):
-            return (first_item, self._score_or_none(second_item))
+            return first_item, self._score_or_none(second_item)
 
         if self._is_sequence(second_item) and len(second_item) >= 2:
             nested_text = second_item[0]
             nested_score = second_item[1]
             if isinstance(nested_text, str):
-                return (nested_text, self._score_or_none(nested_score))
+                return nested_text, self._score_or_none(nested_score)
 
         return None
 
