@@ -8,11 +8,11 @@ from fastmcp import FastMCP
 
 from mcp_ocr.extraction import extract_visible_key_values
 from mcp_ocr.image_loader import load_image
-from mcp_ocr.ocr import PaddleOcrEngine
+from mcp_ocr.ocr import OcrEngine
 from mcp_ocr.schemas import OcrImageResult
 
 mcp = FastMCP(name="mcp-ocr")
-_ocr_engine = PaddleOcrEngine()
+_ocr_engine = OcrEngine()
 
 
 @mcp.tool(

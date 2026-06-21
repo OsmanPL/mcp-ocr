@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import sys
-import types
 from typing import Any
 
-from mcp_ocr.ocr import PaddleOcrEngine
+from mcp_ocr.ocr import RapidOcrEngine
 
 
 class FakePredictEngine:
@@ -21,7 +19,7 @@ def test_ocr_engine_converts_scores_to_percentage() -> None:
     fake = FakePredictEngine(
         [{"rec_texts": ["LOTE", "ABC123"], "rec_scores": [0.9, 1.0]}]
     )
-    engine = PaddleOcrEngine(ocr_engine=fake)
+    engine = RapidOcrEngine(ocr_engine=fake)
 
     result = engine.extract_text(b"fake image bytes", ".png")
 
@@ -31,7 +29,7 @@ def test_ocr_engine_converts_scores_to_percentage() -> None:
 
 
 def test_ocr_engine_returns_null_confidence_without_scores() -> None:
-    engine = PaddleOcrEngine(ocr_engine=FakePredictEngine([{"rec_texts": ["LOTE"]}]))
+    engine = RapidOcrEngine(ocr_engine=FakePredictEngine([{"rec_texts": ["LOTE"]}]))
 
     result = engine.extract_text(b"fake image bytes", ".png")
 
@@ -41,7 +39,7 @@ def test_ocr_engine_returns_null_confidence_without_scores() -> None:
 
 def test_ocr_engine_supports_legacy_nested_sequence_payload() -> None:
     payload = [[[[0, 0], [1, 0], [1, 1], [0, 1]], ["VENC 20/10/2026", 0.88]]]
-    engine = PaddleOcrEngine(ocr_engine=FakePredictEngine(payload))
+    engine = RapidOcrEngine(ocr_engine=FakePredictEngine(payload))
 
     result = engine.extract_text(b"fake image bytes", ".png")
 
@@ -49,27 +47,36 @@ def test_ocr_engine_supports_legacy_nested_sequence_payload() -> None:
     assert result.confidence == 88.0
 
 
-def test_ocr_engine_defaults_to_valid_latin_language_model(monkeypatch) -> None:
-    calls: list[dict[str, Any]] = []
+def test_ocr_engine_supports_rapidocr_payload() -> None:
+    payload = (
+        [
+            [[[0, 0], [1, 0], [1, 1], [0, 1]], "LOTE", 0.9],
+            [[[0, 2], [1, 2], [1, 3], [0, 3]], "ABC123", 0.8],
+        ],
+        [0.1, 0.2, 0.3],
+    )
+    engine = RapidOcrEngine(ocr_engine=FakePredictEngine(payload))
 
-    class FakePaddleOCR:
-        def __init__(self, **kwargs: Any) -> None:
-            calls.append(kwargs)
+    result = engine.extract_text(b"fake image bytes", ".png")
 
-        def predict(self, _image_path: str) -> list[dict[str, list[object]]]:
-            return [{"rec_texts": ["LOTE"], "rec_scores": [0.9]}]
+    assert result.raw == "LOTE\nABC123"
+    assert result.confidence == 85.0
 
-    fake_module = types.SimpleNamespace(PaddleOCR=FakePaddleOCR)
-    monkeypatch.setitem(sys.modules, "paddleocr", fake_module)
 
-    engine = PaddleOcrEngine()
+def test_ocr_engine_initializes_rapidocr_lazily(monkeypatch) -> None:
+    calls: list[bool] = []
+
+    class FakeRapidOCR:
+        def __init__(self) -> None:
+            calls.append(True)
+
+        def __call__(self, _image_path: str, **_kwargs: Any) -> Any:
+            return ([[[[0, 0], [1, 0], [1, 1], [0, 1]], "LOTE", 0.9]], [0.1])
+
+    monkeypatch.setattr("rapidocr_onnxruntime.RapidOCR", FakeRapidOCR)
+
+    engine = RapidOcrEngine()
     result = engine.extract_text(b"fake image bytes", ".png")
 
     assert result.raw == "LOTE"
-    assert calls == [
-        {
-            "lang": "es",
-            "ocr_version": "PP-OCRv5",
-            "use_textline_orientation": True,
-        }
-    ]
+    assert calls == [True]

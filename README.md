@@ -27,22 +27,14 @@ the chat prompt.
 
 ## OCR Model
 
-By default the server initializes PaddleOCR with:
+The server uses RapidOCR with ONNXRuntime and OpenCV headless. This avoids the
+`paddlepaddle` runtime and its `libgomp.so.1` system dependency on FastMCP Cloud.
+
+You can tune the minimum OCR text confidence with:
 
 ```text
-MCP_OCR_LANG=es
-MCP_OCR_VERSION=PP-OCRv5
+MCP_OCR_TEXT_SCORE=0.5
 ```
 
-`es` is used to select PaddleOCR's Latin-script recognition model for Spanish,
-English, and Portuguese text. The server still returns literal OCR output and
-does not translate or normalize text.
-
-## Native Runtime Dependencies
-
-Paddle/PaddleOCR needs the OpenMP runtime library `libgomp.so.1` at runtime.
-The repository includes `nixpacks.toml` so cloud builders that support Nixpacks
-install `libgomp1` in the container.
-
-The repo also includes `Aptfile`, `packages.txt`, and `Dockerfile` fallbacks for
-hosts that use a different buildpack or allow explicit Docker builds.
+The server still returns literal OCR output and does not translate or normalize
+text.

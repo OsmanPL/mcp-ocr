@@ -8,10 +8,9 @@ dependencies = [
     "fastmcp>=3.4.2",
     "httpx>=0.28.1",
     "opencv-contrib-python-headless>=4.10.0.84",
-    "paddleocr>=3.7.0",
-    "paddlepaddle>=3.3.1",
     "pillow>=12.2.0",
     "pydantic>=2.12.5",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [project.scripts]
@@ -32,4 +31,4 @@ line-length = 88
 target-version = "py312"
 
 [tool.uv]
-exclude-dependencies = ["opencv-contrib-python"]
+exclude-dependencies = ["opencv-contrib-python", "opencv-python"]

@@ -1,3 +1,0 @@
-[phases.setup]
-aptPkgs = ["...", "libgomp1"]
-nixLibs = ["...", "gcc-unwrapped"]

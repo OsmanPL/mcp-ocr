@@ -1,4 +1,4 @@
-"""PaddleOCR adapter and result conversion."""
+"""OCR adapter and result conversion."""
 
 from __future__ import annotations
 
@@ -18,21 +18,20 @@ class OcrText:
     confidence: float | None
 
 
-class PaddleOcrEngine:
-    """Run OCR with PaddleOCR and return literal recognized text."""
+class RapidOcrEngine:
+    """Run OCR with RapidOCR/ONNXRuntime and return literal recognized text."""
 
     def __init__(
         self,
         ocr_engine: Any | None = None,
-        lang: str | None = None,
-        ocr_version: str | None = None,
+        _lang: str | None = None,
+        _ocr_version: str | None = None,
     ) -> None:
         self._ocr_engine = ocr_engine
-        self._lang = lang or os.getenv("MCP_OCR_LANG", "es")
-        self._ocr_version = ocr_version or os.getenv("MCP_OCR_VERSION", "PP-OCRv5")
+        self._text_score = float(os.getenv("MCP_OCR_TEXT_SCORE", "0.5"))
 
     def extract_text(self, image_bytes: bytes, suffix: str) -> OcrText:
-        """Extract text from image bytes using a temporary file for PaddleOCR."""
+        """Extract text from image bytes using a temporary file for OCR."""
         temp_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
@@ -47,6 +46,8 @@ class PaddleOcrEngine:
 
     def _predict(self, image_path: str) -> Any:
         engine = self._get_ocr_engine()
+        if callable(engine):
+            return engine(image_path, text_score=self._text_score)
         if hasattr(engine, "predict"):
             return engine.predict(image_path)
         if hasattr(engine, "ocr"):
@@ -55,13 +56,9 @@ class PaddleOcrEngine:
 
     def _get_ocr_engine(self) -> Any:
         if self._ocr_engine is None:
-            from paddleocr import PaddleOCR  # type: ignore[import-untyped]
+            from rapidocr_onnxruntime import RapidOCR
 
-            self._ocr_engine = PaddleOCR(
-                lang=self._lang,
-                ocr_version=self._ocr_version,
-                use_textline_orientation=True,
-            )
+            self._ocr_engine = RapidOCR()
         return self._ocr_engine
 
     def _to_ocr_text(self, result: Any) -> OcrText:
@@ -74,10 +71,14 @@ class PaddleOcrEngine:
             average = sum(scores) / len(scores)
             confidence = average * 100 if average <= 1 else average
             confidence = max(0.0, min(100.0, confidence))
+            confidence = round(confidence, 1)
 
         return OcrText(raw="\n".join(lines), confidence=confidence)
 
     def _extract_entries(self, value: Any) -> list[tuple[str, float | None]]:
+        if _is_rapidocr_result(value):
+            return self._extract_entries(value[0])
+
         if isinstance(value, Mapping):
             entries = self._extract_mapping_entries(value)
             if entries:
@@ -128,9 +129,13 @@ class PaddleOcrEngine:
 
         first_item = value[0]
         second_item = value[1]
+        third_item = value[2] if len(value) >= 3 else None
 
         if isinstance(first_item, str):
             return first_item, self._score_or_none(second_item)
+
+        if isinstance(second_item, str):
+            return second_item, self._score_or_none(third_item)
 
         if self._is_sequence(second_item) and len(second_item) >= 2:
             nested_text = second_item[0]
@@ -155,3 +160,15 @@ class PaddleOcrEngine:
         if isinstance(value, int | float):
             return float(value)
         return None
+
+
+def _is_rapidocr_result(value: Any) -> bool:
+    if not isinstance(value, tuple) or len(value) != 2:
+        return False
+    ocr_entries, timing = value
+    return isinstance(timing, list) and (
+        ocr_entries is None or isinstance(ocr_entries, list)
+    )
+
+
+OcrEngine = RapidOcrEngine
