@@ -24,3 +24,16 @@ Preferred client flow:
 The tool declares `openai/fileParams = ["image_file"]` so OpenAI-compatible
 clients can pass an authorized file reference without sending raw base64 through
 the chat prompt.
+
+## OCR Model
+
+By default the server initializes PaddleOCR with:
+
+```text
+MCP_OCR_LANG=es
+MCP_OCR_VERSION=PP-OCRv5
+```
+
+`es` is used to select PaddleOCR's Latin-script recognition model for Spanish,
+English, and Portuguese text. The server still returns literal OCR output and
+does not translate or normalize text.

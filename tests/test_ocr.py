@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from typing import Any
 
 from mcp_ocr.ocr import PaddleOcrEngine
@@ -45,3 +47,29 @@ def test_ocr_engine_supports_legacy_nested_sequence_payload() -> None:
 
     assert result.raw == "VENC 20/10/2026"
     assert result.confidence == 88.0
+
+
+def test_ocr_engine_defaults_to_valid_latin_language_model(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakePaddleOCR:
+        def __init__(self, **kwargs: Any) -> None:
+            calls.append(kwargs)
+
+        def predict(self, _image_path: str) -> list[dict[str, list[object]]]:
+            return [{"rec_texts": ["LOTE"], "rec_scores": [0.9]}]
+
+    fake_module = types.SimpleNamespace(PaddleOCR=FakePaddleOCR)
+    monkeypatch.setitem(sys.modules, "paddleocr", fake_module)
+
+    engine = PaddleOcrEngine()
+    result = engine.extract_text(b"fake image bytes", ".png")
+
+    assert result.raw == "LOTE"
+    assert calls == [
+        {
+            "lang": "es",
+            "ocr_version": "PP-OCRv5",
+            "use_textline_orientation": True,
+        }
+    ]

@@ -21,9 +21,15 @@ class OcrText:
 class PaddleOcrEngine:
     """Run OCR with PaddleOCR and return literal recognized text."""
 
-    def __init__(self, ocr_engine: Any | None = None, lang: str | None = None) -> None:
+    def __init__(
+        self,
+        ocr_engine: Any | None = None,
+        lang: str | None = None,
+        ocr_version: str | None = None,
+    ) -> None:
         self._ocr_engine = ocr_engine
-        self._lang = lang or os.getenv("MCP_OCR_LANG", "latin")
+        self._lang = lang or os.getenv("MCP_OCR_LANG", "es")
+        self._ocr_version = ocr_version or os.getenv("MCP_OCR_VERSION", "PP-OCRv5")
 
     def extract_text(self, image_bytes: bytes, suffix: str) -> OcrText:
         """Extract text from image bytes using a temporary file for PaddleOCR."""
@@ -53,6 +59,7 @@ class PaddleOcrEngine:
 
             self._ocr_engine = PaddleOCR(
                 lang=self._lang,
+                ocr_version=self._ocr_version,
                 use_textline_orientation=True,
             )
         return self._ocr_engine
