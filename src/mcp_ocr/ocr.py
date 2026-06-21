@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from mcp_ocr.preprocessing import ImageVariant, generate_ocr_variants
+
 
 @dataclass(frozen=True)
 class OcrText:
@@ -16,6 +18,14 @@ class OcrText:
 
     raw: str
     confidence: float | None
+
+
+@dataclass(frozen=True)
+class OcrCandidate:
+    """OCR result for one image variant."""
+
+    variant_name: str
+    result: OcrText
 
 
 class RapidOcrEngine:
@@ -31,11 +41,26 @@ class RapidOcrEngine:
         self._text_score = float(os.getenv("MCP_OCR_TEXT_SCORE", "0.5"))
 
     def extract_text(self, image_bytes: bytes, suffix: str) -> OcrText:
-        """Extract text from image bytes using a temporary file for OCR."""
+        """Extract text from the best OCR variant of the image."""
+        variants = generate_ocr_variants(image_bytes, suffix)
+        candidates = [
+            OcrCandidate(
+                variant_name=variant.name,
+                result=self._extract_text_from_variant(variant),
+            )
+            for variant in variants
+        ]
+        return max(candidates, key=_candidate_score).result
+
+    def _extract_text_from_variant(self, variant: ImageVariant) -> OcrText:
+        """Extract text from one image variant using a temporary file for OCR."""
         temp_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-                temp_file.write(image_bytes)
+            with tempfile.NamedTemporaryFile(
+                suffix=variant.suffix,
+                delete=False,
+            ) as temp_file:
+                temp_file.write(variant.data)
                 temp_path = Path(temp_file.name)
 
             result = self._predict(str(temp_path))
@@ -169,6 +194,15 @@ def _is_rapidocr_result(value: Any) -> bool:
     return isinstance(timing, list) and (
         ocr_entries is None or isinstance(ocr_entries, list)
     )
+
+
+def _candidate_score(candidate: OcrCandidate) -> tuple[float, int, int]:
+    raw = candidate.result.raw.strip()
+    confidence = candidate.result.confidence
+    confidence_score = confidence if confidence is not None else -1.0
+    visible_chars = sum(1 for char in raw if not char.isspace())
+    line_count = len([line for line in raw.splitlines() if line.strip()])
+    return confidence_score, visible_chars, line_count
 
 
 OcrEngine = RapidOcrEngine
